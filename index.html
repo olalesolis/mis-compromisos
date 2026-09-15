@@ -32,7 +32,38 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px 8px;border-bottom:1
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Mis Compromisos">
-<link rel="apple-touch-icon" sizes="180x180" href="icon-180.png?v=3">
+<link rel="apple-touch-icon" href="icon-192.png">
+
+<style>
+/* Mobile navigation: keep desktop sidebar, replace it with a compact bottom nav on phones */
+@media (max-width: 700px){
+  body{padding-bottom:78px!important;overflow-x:hidden}
+  aside,.sidebar,.nav-sidebar{display:none!important}
+  main{margin-left:0!important;width:100%!important;padding:16px!important}
+  .app,.layout,.container{max-width:100%!important}
+  .bottom-nav{
+    position:fixed!important;left:10px!important;right:10px!important;bottom:10px!important;
+    z-index:9999!important;display:flex!important;justify-content:space-around!important;
+    align-items:center!important;background:rgba(255,255,255,.96)!important;
+    border:1px solid #eadff5!important;border-radius:22px!important;
+    box-shadow:0 8px 30px rgba(70,35,100,.15)!important;padding:8px 5px!important;
+    backdrop-filter:blur(12px)!important
+  }
+  .bottom-nav button{
+    flex:1!important;border:0!important;background:transparent!important;
+    color:#665c70!important;font-weight:700!important;font-size:11px!important;
+    padding:7px 3px!important;border-radius:15px!important
+  }
+  .bottom-nav button.active{background:#efe1fb!important;color:#6e32a8!important}
+  .bottom-nav .nav-icon{display:block!important;font-size:20px!important;line-height:20px!important;margin-bottom:2px!important}
+  h1,h2{font-size:24px!important}
+  .card,.panel,.section,.week-card{width:100%!important;box-sizing:border-box!important}
+  table{font-size:13px!important}
+  .table-wrap{overflow-x:auto!important}
+  .grid,.cards{grid-template-columns:1fr!important}
+}
+@media (min-width:701px){.bottom-nav{display:none!important}}
+</style>
 </head>
 <body>
 <div class="app">
@@ -324,5 +355,56 @@ async function installApp(){
   const b=document.getElementById('installBtn'); if(b)b.classList.add('hidden');
 }
 if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js'));
+</script>
+
+<script>
+(function(){
+  function addMobileNav(){
+    if(document.querySelector('.bottom-nav')) return;
+    const nav=document.createElement('nav');
+    nav.className='bottom-nav';
+    nav.innerHTML=`
+      <button data-page="summary"><span class="nav-icon">📊</span>Resumen</button>
+      <button data-page="debts"><span class="nav-icon">💳</span>Compromisos</button>
+      <button data-page="recurring"><span class="nav-icon">📅</span>Recurrentes</button>
+      <button data-page="payments"><span class="nav-icon">💰</span>Pagos</button>`;
+    document.body.appendChild(nav);
+
+    nav.querySelectorAll('button').forEach(b=>{
+      b.addEventListener('click',()=>{
+        const target=b.dataset.page;
+        // Use the existing app navigation if present.
+        const viewMap={summary:'dashboard',debts:'debts',recurring:'recurring',payments:'payments'};
+        if(typeof showView==='function'){ showView(viewMap[target], document.querySelector('.nav button[onclick*="'+viewMap[target]+'"]') || document.querySelector('.nav button')); }
+        const candidates=[
+          `[data-page="${target}"]`,
+          `#${target}`,
+          `#page-${target}`,
+          `button[onclick*="${target}"]`,
+          `a[href="#${target}"]`
+        ];
+        let found=null;
+        for(const sel of candidates){
+          const el=document.querySelector(sel);
+          if(el && el!==b){found=el;break}
+        }
+        if(found) found.click();
+        else {
+          const map={summary:'Resumen',debts:'Compromisos',recurring:'Recurrentes',payments:'Pagos'};
+          const els=[...document.querySelectorAll('button,a')];
+          const text=map[target];
+          const match=els.find(x=>x!==b && x.textContent.trim().includes(text));
+          if(match) match.click();
+        }
+        nav.querySelectorAll('button').forEach(x=>x.classList.remove('active'));
+        b.classList.add('active');
+      });
+    });
+    const initial=nav.querySelector('[data-page="summary"]');
+    if(initial) initial.classList.add('active');
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',addMobileNav);
+  else addMobileNav();
+})();
 </script>
 </body></html>
