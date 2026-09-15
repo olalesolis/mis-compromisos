@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Mis Compromisos</title>
+<style>
+:root{--bg:#f7f4fb;--card:#fff;--ink:#29252f;--muted:#77717e;--purple:#b982ef;--purple2:#d9b9fb;--pink:#ffd6df;--red:#ef777d;--yellow:#fff0a8;--blue:#b8d9f6;--green:#b9e6cb;--line:#e9e3ef;--shadow:0 8px 24px rgba(70,40,90,.08)}
+*{box-sizing:border-box} body{margin:0;font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--bg);color:var(--ink)}
+button,input,select{font:inherit} button{cursor:pointer;border:0}
+.app{display:flex;min-height:100vh}.side{width:240px;background:#fff;border-right:1px solid var(--line);padding:22px 16px;position:sticky;top:0;height:100vh}
+.logo{font-weight:900;font-size:20px;margin:0 8px 28px}.logo span{color:#9b62df}
+.nav button{width:100%;text-align:left;padding:12px 14px;margin:3px 0;border-radius:12px;background:transparent;color:#5e5766}.nav button.active,.nav button:hover{background:#f0e3fb;color:#6f36a8;font-weight:700}
+.main{flex:1;padding:26px;max-width:1400px;margin:auto;width:100%}.top{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:22px}.title h1{margin:0;font-size:28px}.title p{margin:5px 0;color:var(--muted)}
+.primary{background:#9d63dc;color:white;padding:11px 17px;border-radius:12px;font-weight:800;box-shadow:var(--shadow)}
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}.card{background:var(--card);border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--shadow)}.label{font-size:12px;color:var(--muted);font-weight:700}.big{font-size:25px;font-weight:900;margin-top:5px}.danger{color:#c94850}.ok{color:#3c8a5d}
+.grid{display:grid;grid-template-columns:1.55fr 1fr;gap:18px}.section{background:#fff;border:1px solid var(--line);border-radius:16px;padding:18px;box-shadow:var(--shadow);margin-bottom:18px}.section h2{font-size:17px;margin:0 0 14px}.toolbar{display:flex;gap:9px;flex-wrap:wrap;margin-bottom:13px}.toolbar input,.toolbar select,.form input,.form select{border:1px solid #ddd3e5;border-radius:10px;padding:10px;background:#fff;outline:none}.toolbar input:focus,.form input:focus,.form select:focus{border-color:#aa76dd}
+table{width:100%;border-collapse:collapse}th,td{padding:11px 8px;border-bottom:1px solid var(--line);text-align:left;font-size:13px}th{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.04em}tr:last-child td{border-bottom:0}.badge{display:inline-block;padding:5px 8px;border-radius:999px;font-size:11px;font-weight:800}.b-red{background:#ffe0e2;color:#b23c43}.b-yellow{background:#fff4bd;color:#866900}.b-blue{background:#dcebfb;color:#35648c}.b-green{background:#d9f2e2;color:#31734c}
+.amount{font-weight:800;white-space:nowrap}.muted{color:var(--muted)}.progress{height:8px;background:#eee8f1;border-radius:20px;overflow:hidden}.progress i{display:block;height:100%;background:#a86cdf;border-radius:20px}
+.deadline{display:flex;align-items:center;justify-content:space-between;padding:11px 0;border-bottom:1px solid var(--line)}.deadline:last-child{border:0}.date{font-weight:800}.mini{font-size:11px;color:var(--muted)}
+.empty{text-align:center;padding:28px;color:var(--muted)}
+.hidden{display:none!important}
+.modal{position:fixed;inset:0;background:rgba(30,20,35,.35);display:flex;align-items:center;justify-content:center;padding:20px;z-index:10}.modalbox{background:#fff;border-radius:18px;width:min(560px,100%);padding:22px;box-shadow:0 20px 70px rgba(30,10,50,.25)}.modalhead{display:flex;justify-content:space-between;align-items:center;margin-bottom:15px}.modalhead h2{margin:0}.x{background:#f2edf4;border-radius:50%;width:32px;height:32px}.form{display:grid;grid-template-columns:1fr 1fr;gap:12px}.form label{font-size:12px;font-weight:700;color:#625b68;display:flex;flex-direction:column;gap:6px}.form .full{grid-column:1/-1}.actions{display:flex;justify-content:flex-end;gap:8px;margin-top:18px}.secondary{background:#eee8f1;padding:10px 14px;border-radius:10px}.smallbtn{background:#f0e4f9;color:#7039a4;padding:6px 9px;border-radius:8px;font-weight:700;font-size:11px}
+.kpi{display:flex;justify-content:space-between;align-items:end}.note{background:#fbf7ff;border-left:4px solid #b17ce8;padding:12px;border-radius:10px;font-size:13px}
+@media(max-width:950px){.side{width:70px;padding:15px 8px}.logo{font-size:0;text-align:center}.logo span{font-size:24px}.nav button{font-size:0;text-align:center}.nav button:before{content:"•";font-size:22px}.main{padding:18px}.cards{grid-template-columns:1fr 1fr}.grid{grid-template-columns:1fr}}
+@media(max-width:600px){.side{display:none}.cards{grid-template-columns:1fr 1fr}.top{align-items:flex-start}.title h1{font-size:23px}th:nth-child(3),td:nth-child(3){display:none}.form{grid-template-columns:1fr}}
+</style>
+
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#b982ef">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Mis Compromisos">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+</head>
+<body>
+<div class="app">
+<aside class="side">
+  <div class="logo"><span>✦</span> Mis Compromisos</div>
+  <nav class="nav">
+    <button class="active" onclick="showView('dashboard',this)">📊 Resumen</button>
+    <button onclick="showView('debts',this)">💳 Compromisos</button>
+    <button onclick="showView('recurring',this)">📅 Recurrentes</button>
+    <button onclick="showView('payments',this)">💰 Pagos</button>
+  </nav>
+</aside>
+<main class="main">
+  <div class="top">
+    <div class="title"><h1 id="pageTitle">Resumen</h1><p id="pageSub">Tu dinero organizado por fechas y prioridades.</p></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button id="installBtn" class="secondary hidden" onclick="installApp()">📲 Instalar app</button><button class="primary" onclick="openModal()">＋ Registrar compromiso</button></div>
+  </div>
+
+  <section id="dashboard">
+    <div class="cards">
+      <div class="card"><div class="label">DEUDA TOTAL</div><div class="big" id="totalDebt">$0</div><div class="mini">Compromisos registrados</div></div>
+      <div class="card"><div class="label">POR PAGAR ESTA SEMANA</div><div class="big danger" id="dueNow">$0</div><div class="mini">Compromisos + recurrentes + CFE</div></div>
+      <div class="card"><div class="label">APARTADOS ESTA SEMANA</div><div class="big" id="apartados">$0</div><div class="mini">40% del ingreso necesario</div></div>
+      <div class="card"><div class="label">INGRESO NECESARIO ESTA SEMANA</div><div class="big" id="weekIncome">$0</div><div class="mini">Pagos de la semana ÷ 60%</div></div>
+    </div>
+    <div class="section">
+      <h2>🎯 ¿Cuánto necesito generar?</h2>
+      <p class="muted">Si tus compromisos representan el <b>60%</b> de lo que entra, aquí calculamos el ingreso necesario para cubrirlos y dejar el <b>40%</b> para tus apartados y demás categorías.</p>
+      <div class="form" style="margin-top:12px">
+        <label>Pago que necesitas cubrir<input id="needPayment" type="number" step="0.01" value="7700.33" oninput="calcNeeded()"></label>
+        <label>Ingreso total necesario (100%)<input id="needIncome" readonly></label>
+        <label>60% para compromisos<input id="need60" readonly></label>
+        <label>40% para apartados<input id="need40" readonly></label>
+      </div>
+      <div class="note" style="margin-top:14px">💡 Fórmula: <b>pago requerido ÷ 0.60 = ingreso total necesario</b>.</div>
+    </div>
+    <div class="section">
+      <h2>📆 ¿Cuánto necesito generar por semana?</h2>
+      <p class="muted">La app junta <b>compromisos + recurrentes</b> según su fecha. Después divide cada total entre 60% para decirte cuánto necesitas generar.</p>
+      <div id="weeklyNeeds"></div>
+    </div>
+    <div class="grid">
+      <div class="section">
+        <h2>Próximos pagos</h2>
+        <div id="upcoming"></div>
+      </div>
+      <div>
+        <div class="section"><h2>Tu CFE</h2><div id="cfeBox"></div></div>
+        <div class="section"><h2>Vista rápida</h2><div id="quick"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="debts" class="hidden">
+    <div class="section">
+      <div class="toolbar"><input id="search" placeholder="Buscar compromiso…" oninput="renderDebts()"><select id="filter" onchange="renderDebts()"><option value="all">Todos</option><option value="urgent">Vence pronto</option><option value="paid">Pagados</option><option value="open">Pendientes</option></select></div>
+      <table><thead><tr><th>Compromiso</th><th>Total</th><th>Pago / abono</th><th>Restante</th><th>Fecha</th><th>Estado</th><th></th></tr></thead><tbody id="debtTable"></tbody></table>
+    </div>
+  </section>
+
+  <section id="recurring" class="hidden">
+    <div class="section">
+      <h2>Pagos recurrentes</h2>
+      <p class="muted">Aquí llevas servicios y suscripciones sin mezclarlos con las deudas. Puedes marcarlos como pagados cada mes; la app los incluye automáticamente en el cálculo semanal.</p>
+      <table><thead><tr><th>Concepto</th><th>Monto</th><th>Día</th><th>Tipo</th><th>Este mes</th><th></th></tr></thead><tbody id="recTable"></tbody></table>
+    </div>
+  </section>
+
+  <section id="payments" class="hidden">
+    <div class="section"><h2>Historial de pagos</h2><div id="payHistory"></div></div>
+  </section>
+</main>
+</div>
+
+<div id="modal" class="modal hidden" onclick="if(event.target===this)closeModal()">
+<div class="modalbox">
+  <div class="modalhead"><h2>Nuevo compromiso</h2><button class="x" onclick="closeModal()">×</button></div>
+  <div class="form">
+    <label>Nombre<input id="fName" placeholder="Ej. Kueski"></label>
+    <label>Monto total<input id="fTotal" type="number" step="0.01" placeholder="0"></label>
+    <label>Pago / abono<input id="fPay" type="number" step="0.01" placeholder="0"></label>
+    <label>Fecha límite<input id="fDate" type="date"></label>
+    <label class="full">Nota<input id="fNote" placeholder="Ej. pago mínimo, escuela, mensualidad…"></label>
+  </div>
+  <div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveDebt()">Guardar</button></div>
+</div></div>
+
+<script>
+const KEY='mis_compromisos_v1';
+const today=new Date('2026-09-15T12:10:00');
+const defaultData={
+ debts:[
+ {id:1,name:'Kirtan',total:2317,pay:2317,paid:0,date:'2026-09-15',note:''},
+ {id:2,name:'Kabir',total:2992,pay:2992,paid:0,date:'2026-09-15',note:''},
+ {id:3,name:'Celular & apps',total:1389.99,pay:78,paid:0,date:'2026-09-16',note:'Servicios y suscripciones'},
+ {id:4,name:'Hey',total:19286.46,pay:929.88,paid:0,date:'2026-10-05',note:'Mensualidad'},
+ {id:5,name:'Mi escuela',total:5850,pay:1950,paid:0,date:'2026-10-10',note:'Mi mensualidad'},
+ {id:10,name:'Escuela de Kirtan',total:3700,pay:3700,paid:0,date:'2026-09-15',note:'Pago requerido'},
+ {id:6,name:'Kueski',total:1032.88,pay:341.69,paid:0,date:'2026-09-15',note:''},
+ {id:7,name:'Nelo',total:4374.36,pay:1459,paid:0,date:'2026-09-15',note:''},
+ {id:8,name:'Revolut',total:250,pay:430,paid:0,date:'2026-09-21',note:''},
+ {id:9,name:'CFE',total:2000,pay:2000,paid:0,date:'2026-09-30',note:'Apartado bimestral'}
+ ],
+ recurring:[
+ ['Spotify (Revolut)',74,1,'Suscripción'],['Google',39,3,'Suscripción'],['Amazon Prime',99,8,'Suscripción'],['Meli',49.9,10,'Suscripción'],['Canva (Mercado)',100,13,'Suscripción'],['Dulce bocado suscrip',39,16,'Suscripción'],['Corte cabello chicos',350,21,'Personal'],['Movistar',239,25,'Servicio'],['ChatGPT (Revolut)',110,26,'Suscripción'],['iCloud',49,30,'Servicio'],['Nelo VIP Plus',120,14,'Suscripción']
+ ],
+ cfe:{month:2000,start:'2026-08-01',limit:'2026-09-30',current:'2026-09-15'}
+};
+let data=JSON.parse(localStorage.getItem(KEY)||'null')||defaultData;
+data.recurringPaid=data.recurringPaid||{};
+data.recurringMeta=data.recurringMeta||{
+  10:{anchor:'2026-10-14',intervalMonths:3}
+};
+data.cfe=data.cfe||defaultData.cfe;
+data.cfe.daily=33.31;
+data.cfe.weekly=233.31;
+function money(n){return new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN'}).format(n||0)}
+function save(){localStorage.setItem(KEY,JSON.stringify(data))}
+function remaining(d){return Math.max(0,d.total-d.paid)}
+function daysUntil(s){let d=new Date(s+'T23:59:00');return Math.ceil((d-today)/86400000)}
+function status(d){if(remaining(d)<=0)return ['Pagado','b-green'];let x=daysUntil(d.date);if(x<=0)return ['Vencido','b-red'];if(x<=7)return ['Próximo','b-yellow'];return ['Pendiente','b-blue']}
+function getCurrentWeekItems(){
+ let start=startOfWeek(today), end=new Date(start); end.setDate(end.getDate()+6);
+ let items=[];
+ data.debts.forEach(d=>{
+   if(remaining(d)<=0 || d.name==='CFE')return;
+   let dt=new Date(d.date+'T12:00');
+   if(dt>=start&&dt<=end)items.push({name:d.name,amount:Math.min(d.pay,remaining(d)),date:dt});
+ });
+ // CFE is reserved daily at $33.31 / $233.31 weekly.
+ let cfe=data.debts.find(d=>d.name==='CFE'), cfeEnd=new Date(data.cfe.limit+'T23:59:00');
+ if(end>=new Date(data.cfe.start+'T00:00:00') && start<=cfeEnd){
+   let cfeStart=start<new Date(data.cfe.start+'T00:00:00')?new Date(data.cfe.start+'T00:00:00'):start;
+   let cfeWeekEnd=end>cfeEnd?cfeEnd:end;
+   let days=Math.floor((cfeWeekEnd-cfeStart)/86400000)+1;
+   let amount=Math.min(days<7?data.cfe.daily*days:data.cfe.weekly, Math.max(0,remaining(cfe||{total:data.cfe.month,paid:0})));
+   if(amount>0)items.push({name:'CFE (apartado)',amount,date:cfeWeekEnd});
+ }
+ data.recurring.forEach((r,i)=>{
+   let due=recurringDate(r);
+   if(!due)return;
+   let dt=new Date(due+'T12:00'), key=recurringKey(i,due);
+   if(dt>=start&&dt<=end&&!data.recurringPaid[key])items.push({name:r[0],amount:r[1],date:dt});
+ });
+ return items;
+}
+function currentWeekPaymentTotal(){return getCurrentWeekItems().reduce((a,x)=>a+x.amount,0)}
+function render(){
+ let total=data.debts.reduce((a,d)=>a+remaining(d),0), now=currentWeekPaymentTotal();
+ let weekIncome=now/0.60;
+ document.getElementById('totalDebt').textContent=money(total);
+ document.getElementById('dueNow').textContent=money(now);
+ document.getElementById('apartados').textContent=money(weekIncome*0.40);
+ document.getElementById('weekIncome').textContent=money(weekIncome);
+ renderUpcoming();renderDebts();renderRecurring();renderPayments();renderCFE();renderQuick();renderWeeklyNeeds();
+}
+function startOfWeek(d){let x=new Date(d);let day=x.getDay();let diff=day===0?-6:1-day;x.setDate(x.getDate()+diff);x.setHours(0,0,0,0);return x}
+function iso(d){return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`}
+function weekLabel(start){
+ let end=new Date(start);end.setDate(end.getDate()+6);
+ return `${start.toLocaleDateString('es-MX',{day:'2-digit',month:'short'})} – ${end.toLocaleDateString('es-MX',{day:'2-digit',month:'short'})}`;
+}
+function renderWeeklyNeeds(){
+ let base=startOfWeek(today), weeks=[];
+ for(let w=0;w<6;w++){
+   let start=new Date(base);start.setDate(base.getDate()+w*7);
+   let end=new Date(start);end.setDate(start.getDate()+6);
+   let items=[];
+   data.debts.forEach(d=>{
+     if(remaining(d)<=0)return;
+     // CFE se aparta diariamente: $33.31/día = $233.31/semana.
+     if(d.name==='CFE')return;
+     let dt=new Date(d.date+'T12:00');
+     if(dt>=start&&dt<=end)items.push({name:d.name,amount:Math.min(d.pay,remaining(d)),date:dt});
+   });
+   // CFE: se incluye como apartado semanal mientras siga abierto el periodo.
+   let cfeEnd=new Date(data.cfe.limit+'T23:59:00');
+   if(end>=new Date(data.cfe.start+'T00:00:00') && start<=cfeEnd){
+     let weekStart=start<new Date(data.cfe.start+'T00:00:00')?new Date(data.cfe.start+'T00:00:00'):start;
+     let weekEnd=end>cfeEnd?cfeEnd:end;
+     let days=Math.floor((weekEnd-weekStart)/86400000)+1;
+     let cfeRemaining=remaining(data.debts.find(d=>d.name==='CFE')||{total:data.cfe.month,paid:0});
+     let cfeAmount=Math.min(data.cfe.weekly, cfeRemaining);
+     if(days<7)cfeAmount=Math.min(data.cfe.daily*days,cfeRemaining);
+     if(cfeAmount>0)items.push({name:'CFE (apartado diario)',amount:cfeAmount,date:weekEnd});
+   }
+   data.recurring.forEach((r,i)=>{
+     let due=recurringDate(r), dt=due?new Date(due+'T12:00'):null;
+     if(!dt)return;
+     let key=recurringKey(i,due);
+     if(data.recurringPaid[key])return;
+     if(dt>=start&&dt<=end)items.push({name:r[0],amount:r[1],date:dt,rec:true,index:i});
+   });
+   let required=items.reduce((a,x)=>a+x.amount,0);
+   if(items.length)weeks.push({start,items,required});
+ }
+ let el=document.getElementById('weeklyNeeds');
+ el.innerHTML=weeks.length?weeks.map((w,idx)=>{
+   let income=w.required/.60;
+   return `<div class="card" style="margin-bottom:10px;padding:14px">
+     <div class="kpi"><div><b>Semana ${idx+1}: ${weekLabel(w.start)}</b><div class="mini">${w.items.length} pago(s) programado(s)</div></div>
+     <div style="text-align:right"><div class="mini">Ingreso necesario</div><div class="big">${money(income)}</div></div></div>
+     <div style="margin-top:10px">${w.items.map(x=>`<div class="deadline"><span>${x.name}<span class="mini"> · ${x.date.toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit'})}</span></span><span class="amount">${money(x.amount)}</span></div>`).join('')}</div>
+     <div class="note" style="margin-top:10px">💳 Pagos: <b>${money(w.required)}</b> · 🟣 Apartados (40%): <b>${money(income*.40)}</b> · 🎯 Ingreso necesario: <b>${money(income)}</b></div>
+   </div>`
+ }).join(''):'<div class="empty">No hay pagos pendientes en las próximas 6 semanas 🎉</div>';
+}
+function renderUpcoming(){
+ let arr=data.debts.filter(d=>remaining(d)>0).sort((a,b)=>a.date.localeCompare(b.date)).slice(0,7);
+ document.getElementById('upcoming').innerHTML=arr.length?arr.map(d=>{let s=status(d),x=daysUntil(d.date);return `<div class="deadline"><div><div class="date">${d.name}</div><div class="mini">${new Date(d.date+'T12:00').toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'})} · ${x<0?'venció hace '+Math.abs(x)+' días':x===0?'vence hoy':x+' días'}</div></div><div style="text-align:right"><div class="amount">${money(d.pay)}</div><span class="badge ${s[1]}">${s[0]}</span></div></div>`}).join(''):'<div class="empty">No tienes pagos pendientes 🎉</div>';
+}
+function renderDebts(){
+ let q=(document.getElementById('search')?.value||'').toLowerCase(),f=document.getElementById('filter')?.value||'all';
+ let arr=data.debts.filter(d=>d.name.toLowerCase().includes(q)).filter(d=>f==='all'||(f==='paid'&&remaining(d)<=0)||(f==='open'&&remaining(d)>0)||(f==='urgent'&&remaining(d)>0&&daysUntil(d.date)<=7));
+ document.getElementById('debtTable').innerHTML=arr.map(d=>{let s=status(d);return `<tr><td><b>${d.name}</b><div class="mini">${d.note||''}</div></td><td>${money(d.total)}</td><td class="amount">${money(d.pay)}</td><td class="amount">${money(remaining(d))}</td><td>${new Date(d.date+'T12:00').toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'2-digit'})}</td><td><span class="badge ${s[1]}">${s[0]}</span></td><td><button class="smallbtn" onclick="registerPayment(${d.id})">Abonar</button></td></tr>`}).join('')||'<tr><td colspan="7" class="empty">No hay compromisos que coincidan.</td></tr>';
+}
+function recurringKey(i,dueDate=null){
+ let date=dueDate;
+ if(!date){
+   let r=data.recurring[i];
+   date=recurringDate(r);
+ }
+ return `${date||'unknown'}-${i}`;
+}
+function recurringDate(r, year=today.getFullYear(), month=today.getMonth()){
+ let idx=data.recurring.indexOf(r), meta=data.recurringMeta?.[idx];
+ if(meta?.anchor){
+   let anchor=new Date(meta.anchor+'T12:00'), target=new Date(year,month,14,12);
+   let diff=(target.getFullYear()-anchor.getFullYear())*12+(target.getMonth()-anchor.getMonth());
+   if(diff%meta.intervalMonths!==0) return null;
+   return meta.anchor;
+ }
+ let day=Math.min(+r[2],new Date(year,month+1,0).getDate());
+ return `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`
+}
+function isRecurringPaid(i,dueDate=null){return !!data.recurringPaid[recurringKey(i,dueDate)]}
+
+function renderRecurring(){
+ document.getElementById('recTable').innerHTML=data.recurring.map((r,i)=>{
+   let due=recurringDate(r), paid=isRecurringPaid(i,due);
+   let frequency=(data.recurringMeta?.[i]?.intervalMonths===3)?'Cada 3 meses':'Mensual';
+   return `<tr><td><b>${r[0]}</b></td><td class="amount">${money(r[1])}</td><td>${due?fmt(due):'14 de oct.'}</td><td><span class="badge b-blue">${r[3]}</span><div class="mini">${frequency}</div></td>
+   <td>${paid?'<span class="badge b-green">Pagado ✓</span>':'<button class="smallbtn" onclick="payRecurring('+i+')">Pagar</button>'}</td>
+   <td><button class="smallbtn" onclick="removeRecurring(${i})">Eliminar</button></td></tr>`
+ }).join('')}
+function payRecurring(i){
+ let r=data.recurring[i], due=recurringDate(r), key=recurringKey(i,due), n=prompt(`¿Cuánto pagaste de ${r[0]}?`,r[1]);
+ if(n===null)return; n=+n;
+ if(!n||n<0)return;
+ if(n>=r[1]) data.recurringPaid[key]=true;
+ else alert(`Para que el cálculo semanal sea preciso, registra el pago completo de ${money(r[1])}. Si necesitas manejar abonos parciales, conviene registrarlo como compromiso.`);
+ save();render();
+}
+function renderPayments(){
+ let pays=data.debts.filter(d=>d.paid>0);
+ document.getElementById('payHistory').innerHTML=pays.length?pays.map(d=>`<div class="deadline"><div><b>${d.name}</b><div class="mini">Abonos acumulados</div></div><div class="amount">${money(d.paid)}</div></div>`).join(''):'<div class="empty">Aún no has registrado pagos.</div>';
+}
+function renderCFE(){let c=data.cfe;let pct=Math.min(100,(c.month-(c.month-(c.month?0:0))));document.getElementById('cfeBox').innerHTML=`<div class="kpi"><div><div class="mini">Apartado objetivo</div><div class="big">${money(c.month)}</div></div><div style="font-size:30px">⚡</div></div><div class="note" style="margin-top:12px">Periodo: ${fmt(c.start)} → ${fmt(c.limit)}<br>Hoy: ${fmt(c.current)}<br><b>Apartado diario: ${money(c.daily)}</b><br><b>Apartado semanal: ${money(c.weekly)}</b></div>`}
+function renderQuick(){let open=data.debts.filter(d=>remaining(d)>0).length, paid=data.debts.filter(d=>remaining(d)<=0).length;document.getElementById('quick').innerHTML=`<div class="deadline"><span>Pendientes</span><b>${open}</b></div><div class="deadline"><span>Liquidados</span><b class="ok">${paid}</b></div><div class="deadline"><span>Suscripciones/servicios</span><b>${data.recurring.length}</b></div>`}
+function fmt(s){return new Date(s+'T12:00').toLocaleDateString('es-MX',{day:'2-digit',month:'short'})}
+function calcNeeded(){
+ let payment=+(document.getElementById('needPayment')?.value||0);
+ let income=payment/0.60, reserve=income*0.40;
+ if(document.getElementById('needIncome')) document.getElementById('needIncome').value=money(income);
+ if(document.getElementById('need60')) document.getElementById('need60').value=money(payment);
+ if(document.getElementById('need40')) document.getElementById('need40').value=money(reserve);
+}
+function showView(id,btn){document.querySelectorAll('main section').forEach(x=>x.classList.add('hidden'));document.getElementById(id).classList.remove('hidden');document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));btn.classList.add('active');let titles={dashboard:['Resumen','Tu dinero organizado por fechas y prioridades.'],debts:['Compromisos','Deudas, pagos mínimos y fechas límite.'],recurring:['Recurrentes','Servicios y suscripciones que se repiten.'],payments:['Pagos','Lo que ya has abonado.']};document.getElementById('pageTitle').textContent=titles[id][0];document.getElementById('pageSub').textContent=titles[id][1]}
+function openModal(){document.getElementById('modal').classList.remove('hidden');document.getElementById('fDate').value='2026-09-15';document.getElementById('fName').focus()}
+function closeModal(){document.getElementById('modal').classList.add('hidden')}
+function saveDebt(){let name=document.getElementById('fName').value.trim(),total=+document.getElementById('fTotal').value,pay=+document.getElementById('fPay').value,date=document.getElementById('fDate').value,note=document.getElementById('fNote').value.trim();if(!name||!total||!date){alert('Agrega nombre, monto total y fecha límite.');return}data.debts.push({id:Date.now(),name,total,pay:pay||total,paid:0,date,note});save();closeModal();render()}
+function registerPayment(id){let d=data.debts.find(x=>x.id===id);let n=prompt(`¿Cuánto abonaste a ${d.name}?`,d.pay);if(n===null)return;n=+n;if(!n||n<0)return;d.paid=Math.min(d.total,d.paid+n);save();render()}
+function removeRecurring(i){if(confirm('¿Eliminar este recurrente?')){data.recurring.splice(i,1);save();render()}}
+calcNeeded();
+render();
+</script>
+
+<script>
+let deferredInstallPrompt=null;
+window.addEventListener('beforeinstallprompt',e=>{
+  e.preventDefault(); deferredInstallPrompt=e;
+  const b=document.getElementById('installBtn'); if(b)b.classList.remove('hidden');
+});
+async function installApp(){
+  if(!deferredInstallPrompt)return;
+  deferredInstallPrompt.prompt();
+  await deferredInstallPrompt.userChoice;
+  deferredInstallPrompt=null;
+  const b=document.getElementById('installBtn'); if(b)b.classList.add('hidden');
+}
+if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js'));
+</script>
+</body></html>
