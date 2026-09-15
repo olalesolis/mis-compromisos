@@ -353,10 +353,10 @@ function getCurrentWeekItems(){
    if(amount>0)items.push({name:'CFE (apartado)',amount,date:cfeWeekEnd});
  }
  data.recurring.forEach((r,i)=>{
-   let due=recurringDate(r);
-   if(!due)return;
-   let dt=new Date(due+'T12:00'), key=recurringKey(i,due);
-   if(dt>=start&&dt<=end&&!data.recurringPaid[key])items.push({name:r[0],amount:r[1],date:dt});
+   recurringOccurrencesInRange(r,start,end).forEach(due=>{
+     let dt=new Date(due+'T12:00'), key=recurringKey(i,due);
+     if(!data.recurringPaid[key])items.push({name:r[0],amount:r[1],date:dt,rec:true,index:i});
+   });
  });
  return items;
 }
@@ -395,11 +395,10 @@ function renderWeeklyNeeds(){
      items.push({name:'CFE (apartado semanal)',amount:Number(data.cfe.weekly),date:end});
    }
    data.recurring.forEach((r,i)=>{
-     let due=recurringDate(r), dt=due?new Date(due+'T12:00'):null;
-     if(!dt)return;
-     let key=recurringKey(i,due);
-     if(data.recurringPaid[key])return;
-     if(dt>=start&&dt<=end)items.push({name:r[0],amount:r[1],date:dt,rec:true,index:i});
+     recurringOccurrencesInRange(r,start,end).forEach(due=>{
+       let dt=new Date(due+'T12:00'), key=recurringKey(i,due);
+       if(!data.recurringPaid[key])items.push({name:r[0],amount:r[1],date:dt,rec:true,index:i});
+     });
    });
    let required=items.reduce((a,x)=>a+x.amount,0);
    if(items.length)weeks.push({start,items,required});
@@ -434,27 +433,47 @@ function recurringKey(i,dueDate=null){
 }
 function recurringDate(r, year=today.getFullYear(), month=today.getMonth()){
  let idx=data.recurring.indexOf(r), meta=data.recurringMeta?.[idx];
- if(meta?.anchor){
-   let anchor=new Date(meta.anchor+'T12:00'), target=new Date(year,month,14,12);
-   let diff=(target.getFullYear()-anchor.getFullYear())*12+(target.getMonth()-anchor.getMonth());
-   if(diff%meta.intervalMonths!==0) return null;
-   return meta.anchor;
- }
  let day=Math.min(+r[2],new Date(year,month+1,0).getDate());
+ if(meta?.anchor){
+   let anchor=new Date(meta.anchor+'T12:00');
+   let targetMonth=new Date(year,month,1,12);
+   let anchorMonth=new Date(anchor.getFullYear(),anchor.getMonth(),1,12);
+   let diff=(targetMonth.getFullYear()-anchorMonth.getFullYear())*12+(targetMonth.getMonth()-anchorMonth.getMonth());
+   let interval=Number(meta.intervalMonths)||1;
+   if(diff<0 || diff%interval!==0) return null;
+   day=Math.min(anchor.getDate(),new Date(year,month+1,0).getDate());
+ }
  return `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`
+}
+function recurringOccurrencesInRange(r,start,end){
+ let out=[], cur=new Date(start.getFullYear(),start.getMonth(),1,12), last=new Date(end.getFullYear(),end.getMonth(),1,12);
+ while(cur<=last){
+   let due=recurringDate(r,cur.getFullYear(),cur.getMonth());
+   if(due){let dt=new Date(due+'T12:00'); if(dt>=start&&dt<=end) out.push(due);}
+   cur.setMonth(cur.getMonth()+1);
+ }
+ return out;
+}
+function nextRecurringDate(r){
+ let start=new Date(today); start.setHours(0,0,0,0);
+ let end=new Date(start); end.setMonth(end.getMonth()+12);
+ let dates=recurringOccurrencesInRange(r,start,end).sort();
+ return dates[0]||null;
 }
 function isRecurringPaid(i,dueDate=null){return !!data.recurringPaid[recurringKey(i,dueDate)]}
 
 function renderRecurring(){
  document.getElementById('recTable').innerHTML=data.recurring.map((r,i)=>{
-   let due=recurringDate(r), paid=isRecurringPaid(i,due);
+   let due=nextRecurringDate(r), paid=isRecurringPaid(i,due);
    let frequency=(data.recurringMeta?.[i]?.intervalMonths===3)?'Cada 3 meses':'Mensual';
-   return `<tr><td><b>${r[0]}</b></td><td class="amount">${money(r[1])}</td><td>${due?fmt(due):'14 de oct.'}</td><td><span class="badge b-blue">${r[3]}</span><div class="mini">${frequency}</div></td>
+   return `<tr><td><b>${r[0]}</b></td><td class="amount">${money(r[1])}</td><td>${due?fmt(due):'Sin fecha'}</td><td><span class="badge b-blue">${r[3]}</span><div class="mini">${frequency}</div></td>
    <td>${paid?'<span class="badge b-green">Pagado ✓</span>':'<button class="smallbtn" onclick="payRecurring('+i+')">Pagar</button>'}</td>
    <td><button class="smallbtn" onclick="removeRecurring(${i})">Eliminar</button></td></tr>`
  }).join('')}
 function payRecurring(i){
- let r=data.recurring[i], due=recurringDate(r), key=recurringKey(i,due), n=prompt(`¿Cuánto pagaste de ${r[0]}?`,r[1]);
+ let r=data.recurring[i], due=nextRecurringDate(r);
+ if(!due){alert('No hay un próximo vencimiento programado.');return}
+ let key=recurringKey(i,due), n=prompt(`¿Cuánto pagaste de ${r[0]}?`,r[1]);
  if(n===null)return; n=+n;
  if(!n||n<0)return;
  if(n>=r[1]) data.recurringPaid[key]=true;
