@@ -64,8 +64,44 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px 8px;border-bottom:1
 }
 @media (min-width:701px){.bottom-nav{display:none!important}}
 </style>
+
+<style>
+#authScreen{position:fixed;inset:0;z-index:10000;background:linear-gradient(135deg,#f7f4fb,#efe3fb);display:flex;align-items:center;justify-content:center;padding:20px}
+#authScreen.hidden{display:none!important}
+.authbox{width:min(430px,100%);background:#fff;border:1px solid #e9e3ef;border-radius:24px;padding:28px;box-shadow:0 20px 70px rgba(70,40,90,.16)}
+.authbox h1{margin:0 0 6px;font-size:28px}.authbox p{color:#77717e;margin:0 0 22px}
+.authbox label{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:800;color:#625b68;margin-bottom:12px}
+.authbox input{border:1px solid #ddd3e5;border-radius:11px;padding:12px;background:#fff;outline:none}
+.authbox input:focus{border-color:#aa76dd}
+.auth-actions{display:flex;gap:9px;margin-top:8px}.auth-actions button{flex:1;padding:12px;border-radius:11px;font-weight:800}
+.auth-primary{background:#9d63dc;color:#fff}.auth-secondary{background:#eee8f1;color:#5e5766}
+.authmsg{font-size:12px;margin-top:13px;padding:10px;border-radius:10px;background:#fbf7ff;color:#6f36a8}
+.authmsg.error{background:#fff0f1;color:#b23c43}
+#syncStatus{font-size:11px;color:#6f36a8;background:#f2e8fb;border-radius:999px;padding:6px 9px;font-weight:800}
+#logoutBtn{font-size:11px;padding:7px 10px;border-radius:9px;background:#eee8f1;color:#5e5766;font-weight:800}
+.user-tools{display:flex;gap:7px;align-items:center;justify-content:flex-end;flex-wrap:wrap}
+@media(max-width:600px){.authbox{padding:22px}.user-tools{width:100%;justify-content:flex-start}}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
 </head>
 <body>
+
+<div id="authScreen">
+  <div class="authbox">
+    <div style="font-size:38px;margin-bottom:8px">✦</div>
+    <h1>Mis Compromisos</h1>
+    <p>Entra para sincronizar tus compromisos y pagos entre tu computadora y tu iPhone.</p>
+    <label>Correo electrónico<input id="authEmail" type="email" autocomplete="email" placeholder="tu correo"></label>
+    <label>Contraseña<input id="authPassword" type="password" autocomplete="current-password" placeholder="Mínimo 6 caracteres"></label>
+    <div class="auth-actions">
+      <button class="auth-primary" onclick="loginUser()">Entrar</button>
+      <button class="auth-secondary" onclick="signupUser()">Crear cuenta</button>
+    </div>
+    <div id="authMsg" class="authmsg hidden"></div>
+  </div>
+</div>
+
 <div class="app">
 <aside class="side">
   <div class="logo"><span>✦</span> Mis Compromisos</div>
@@ -79,7 +115,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px 8px;border-bottom:1
 <main class="main">
   <div class="top">
     <div class="title"><h1 id="pageTitle">Resumen</h1><p id="pageSub">Tu dinero organizado por fechas y prioridades.</p></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end"><button id="installBtn" class="secondary hidden" onclick="installApp()">📲 Instalar app</button><button class="primary" onclick="openModal()">＋ Registrar compromiso</button></div>
+    <div class="user-tools"><span id="syncStatus">☁️ Conectando…</span><span id="userEmail" class="mini"></span><button id="logoutBtn" onclick="logoutUser()">Salir</button><button id="installBtn" class="secondary hidden" onclick="installApp()">📲 Instalar app</button><button class="primary" onclick="openModal()">＋ Registrar compromiso</button></div>
   </div>
 
   <section id="dashboard">
@@ -172,16 +208,100 @@ const defaultData={
  ],
  cfe:{month:2000,start:'2026-08-01',limit:'2026-09-30',current:'2026-09-15'}
 };
-let data=JSON.parse(localStorage.getItem(KEY)||'null')||defaultData;
+let data=JSON.parse(localStorage.getItem(KEY)||'null')||structuredClone(defaultData);
 data.recurringPaid=data.recurringPaid||{};
 data.recurringMeta=data.recurringMeta||{
   10:{anchor:'2026-10-14',intervalMonths:3}
 };
-data.cfe=data.cfe||defaultData.cfe;
+data.cfe=data.cfe||structuredClone(defaultData.cfe);
 data.cfe.daily=33.31;
 data.cfe.weekly=233.31;
+
+const SUPABASE_URL='https://fcgqbkabtqhdviffjpwp.supabase.co';
+const SUPABASE_PUBLISHABLE_KEY='sb_publishable_0ly-YmlsNG8UcTzy5J8dVw_4_RNP76X';
+const supabaseClient=window.supabase.createClient(SUPABASE_URL,SUPABASE_PUBLISHABLE_KEY);
+let currentUser=null;
+let cloudReady=false;
+
+function setSyncStatus(text,ok=true){
+  const el=document.getElementById('syncStatus');
+  if(el){el.textContent=text;el.style.background=ok?'#f2e8fb':'#fff0f1';el.style.color=ok?'#6f36a8':'#b23c43'}
+}
+function showAuthMsg(text,error=false){
+  const el=document.getElementById('authMsg');
+  el.textContent=text;el.classList.remove('hidden');el.classList.toggle('error',error);
+}
+function hideAuthMsg(){document.getElementById('authMsg')?.classList.add('hidden')}
+
+async function syncToCloud(){
+  if(!currentUser || !cloudReady)return;
+  try{
+    setSyncStatus('☁️ Guardando…',true);
+    const payload={user_id:currentUser.id,data:data,updated_at:new Date().toISOString()};
+    const {error}=await supabaseClient.from('app_data').upsert(payload,{onConflict:'user_id'});
+    if(error) throw error;
+    localStorage.setItem(KEY,JSON.stringify(data));
+    setSyncStatus('☁️ Sincronizado',true);
+  }catch(e){
+    console.error(e);
+    setSyncStatus('⚠️ Sin conexión',false);
+  }
+}
+async function loadCloudData(){
+  if(!currentUser)return;
+  setSyncStatus('☁️ Cargando…',true);
+  const {data:row,error}=await supabaseClient.from('app_data').select('data').eq('user_id',currentUser.id).maybeSingle();
+  if(error) throw error;
+  if(row && row.data){
+    data=row.data;
+    data.recurringPaid=data.recurringPaid||{};
+    data.recurringMeta=data.recurringMeta||{10:{anchor:'2026-10-14',intervalMonths:3}};
+    data.cfe=data.cfe||structuredClone(defaultData.cfe);
+    data.cfe.daily=33.31;data.cfe.weekly=233.31;
+    localStorage.setItem(KEY,JSON.stringify(data));
+  }else{
+    await syncToCloud();
+  }
+  render();
+  setSyncStatus('☁️ Sincronizado',true);
+}
+async function loginUser(){
+  hideAuthMsg();
+  const email=document.getElementById('authEmail').value.trim();
+  const password=document.getElementById('authPassword').value;
+  if(!email||!password){showAuthMsg('Escribe tu correo y contraseña.',true);return}
+  const {error}=await supabaseClient.auth.signInWithPassword({email,password});
+  if(error){showAuthMsg(error.message,true);return}
+}
+async function signupUser(){
+  hideAuthMsg();
+  const email=document.getElementById('authEmail').value.trim();
+  const password=document.getElementById('authPassword').value;
+  if(!email||!password){showAuthMsg('Escribe tu correo y una contraseña.',true);return}
+  if(password.length<6){showAuthMsg('La contraseña debe tener al menos 6 caracteres.',true);return}
+  const {data:result,error}=await supabaseClient.auth.signUp({email,password});
+  if(error){showAuthMsg(error.message,true);return}
+  if(result.session){
+    showAuthMsg('Cuenta creada. Entrando…');
+  }else{
+    showAuthMsg('Cuenta creada. Revisa tu correo para confirmar tu cuenta y después vuelve a entrar.');
+  }
+}
+async function logoutUser(){
+  await supabaseClient.auth.signOut();
+}
+async function onSignedIn(session){
+  currentUser=session.user;
+  cloudReady=true;
+  document.getElementById('authScreen')?.classList.add('hidden');
+  const ue=document.getElementById('userEmail'); if(ue)ue.textContent=currentUser.email||'';
+  try{await loadCloudData()}catch(e){console.error(e);setSyncStatus('⚠️ Revisa la conexión',false);render()}
+}
+function save(){
+  localStorage.setItem(KEY,JSON.stringify(data));
+  syncToCloud();
+}
 function money(n){return new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN'}).format(n||0)}
-function save(){localStorage.setItem(KEY,JSON.stringify(data))}
 function remaining(d){return Math.max(0,d.total-d.paid)}
 function daysUntil(s){let d=new Date(s+'T23:59:00');return Math.ceil((d-today)/86400000)}
 function status(d){if(remaining(d)<=0)return ['Pagado','b-green'];let x=daysUntil(d.date);if(x<=0)return ['Vencido','b-red'];if(x<=7)return ['Próximo','b-yellow'];return ['Pendiente','b-blue']}
@@ -364,7 +484,7 @@ if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.se
     const nav=document.createElement('nav');
     nav.className='bottom-nav';
     nav.innerHTML=`
-      <button data-page="summary"><span class="nav-icon">📊</span>Resumen</button>
+      <button data-page="dashboard"><span class="nav-icon">📊</span>Resumen</button>
       <button data-page="debts"><span class="nav-icon">💳</span>Compromisos</button>
       <button data-page="recurring"><span class="nav-icon">📅</span>Recurrentes</button>
       <button data-page="payments"><span class="nav-icon">💰</span>Pagos</button>`;
@@ -373,9 +493,7 @@ if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.se
     nav.querySelectorAll('button').forEach(b=>{
       b.addEventListener('click',()=>{
         const target=b.dataset.page;
-        // Use the existing app navigation if present.
-        const viewMap={summary:'dashboard',debts:'debts',recurring:'recurring',payments:'payments'};
-        if(typeof showView==='function'){ showView(viewMap[target], document.querySelector('.nav button[onclick*="'+viewMap[target]+'"]') || document.querySelector('.nav button')); }
+        if(typeof showView==='function'){ showView(target, document.querySelector('.nav button[onclick*="'+target+'"]') || document.querySelector('.nav button')); }
         const candidates=[
           `[data-page="${target}"]`,
           `#${target}`,
@@ -390,7 +508,7 @@ if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.se
         }
         if(found) found.click();
         else {
-          const map={summary:'Resumen',debts:'Compromisos',recurring:'Recurrentes',payments:'Pagos'};
+          const map={dashboard:'Resumen',debts:'Compromisos',recurring:'Recurrentes',payments:'Pagos'};
           const els=[...document.querySelectorAll('button,a')];
           const text=map[target];
           const match=els.find(x=>x!==b && x.textContent.trim().includes(text));
@@ -400,11 +518,31 @@ if('serviceWorker' in navigator) window.addEventListener('load',()=>navigator.se
         b.classList.add('active');
       });
     });
-    const initial=nav.querySelector('[data-page="summary"]');
+    const initial=nav.querySelector('[data-page="dashboard"]');
     if(initial) initial.classList.add('active');
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',addMobileNav);
   else addMobileNav();
 })();
 </script>
+
+<script>
+window.addEventListener('DOMContentLoaded',async()=>{
+  try{
+    const {data:{session}}=await supabaseClient.auth.getSession();
+    if(session) await onSignedIn(session);
+    else setSyncStatus('🔐 Inicia sesión',true);
+    supabaseClient.auth.onAuthStateChange((event,session)=>{
+      if(session) setTimeout(()=>onSignedIn(session),0);
+      else{
+        currentUser=null;cloudReady=false;
+        document.getElementById('authScreen')?.classList.remove('hidden');
+        setSyncStatus('🔐 Inicia sesión',true);
+        const ue=document.getElementById('userEmail');if(ue)ue.textContent='';
+      }
+    });
+  }catch(e){console.error(e);showAuthMsg('No se pudo conectar con la nube. Recarga la página.',true)}
+});
+</script>
+
 </body></html>
