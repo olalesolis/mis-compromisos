@@ -156,7 +156,7 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px 8px;border-bottom:1
   <section id="debts" class="hidden">
     <div class="section">
       <div class="toolbar"><input id="search" placeholder="Buscar compromiso…" oninput="renderDebts()"><select id="filter" onchange="renderDebts()"><option value="all">Todos</option><option value="urgent">Vence pronto</option><option value="paid">Pagados</option><option value="open">Pendientes</option></select></div>
-      <table><thead><tr><th>Compromiso</th><th>Total</th><th>Pago / abono</th><th>Restante</th><th>Fecha</th><th>Estado</th><th></th></tr></thead><tbody id="debtTable"></tbody></table>
+      <table><thead><tr><th>Compromiso</th><th>Saldo actual</th><th>Próximo pago</th><th>Fecha</th><th>Estado</th><th></th></tr></thead><tbody id="debtTable"></tbody></table>
     </div>
   </section>
 
@@ -176,12 +176,13 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px 8px;border-bottom:1
 
 <div id="modal" class="modal hidden" onclick="if(event.target===this)closeModal()">
 <div class="modalbox">
-  <div class="modalhead"><h2>Nuevo compromiso</h2><button class="x" onclick="closeModal()">×</button></div>
+  <div class="modalhead"><h2 id="modalTitle">Nuevo compromiso</h2><button class="x" onclick="closeModal()">×</button></div>
   <div class="form">
-    <label>Nombre<input id="fName" placeholder="Ej. Kueski"></label>
-    <label>Monto total<input id="fTotal" type="number" step="0.01" placeholder="0"></label>
-    <label>Pago / abono<input id="fPay" type="number" step="0.01" placeholder="0"></label>
-    <label>Fecha límite<input id="fDate" type="date"></label>
+    <label>Nombre<input id="fName" placeholder="Ej. Nelo"></label>
+    <label>Tipo<select id="fType"><option value="fixed">Deuda fija</option><option value="revolving">Crédito / cuenta revolvente</option></select></label>
+    <label>Saldo actual<input id="fBalance" type="number" step="0.01" placeholder="0"></label>
+    <label>Próximo pago<input id="fPay" type="number" step="0.01" placeholder="0"></label>
+    <label>Fecha del próximo pago<input id="fDate" type="date"></label>
     <label class="full">Nota<input id="fNote" placeholder="Ej. pago mínimo, escuela, mensualidad…"></label>
   </div>
   <div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveDebt()">Guardar</button></div>
@@ -210,12 +211,38 @@ const defaultData={
 };
 let data=JSON.parse(localStorage.getItem(KEY)||'null')||structuredClone(defaultData);
 data.recurringPaid=data.recurringPaid||{};
-data.recurringMeta=data.recurringMeta||{
-  10:{anchor:'2026-10-14',intervalMonths:3}
-};
+data.recurringMeta=data.recurringMeta||{10:{anchor:'2026-10-14',intervalMonths:3}};
 data.cfe=data.cfe||structuredClone(defaultData.cfe);
 data.cfe.daily=33.31;
 data.cfe.weekly=233.31;
+// Version 2: separate current balance, next payment and payment status.
+// The migration runs once. Existing cumulative payments are converted into the
+// current balance and the current payment status without guessing future statements.
+function normalizeData(){
+  data.schemaVersion=data.schemaVersion||1;
+  if(data.schemaVersion<2){
+    (data.debts||[]).forEach(d=>{
+      const oldTotal=Number(d.total)||0, oldPaid=Number(d.paid)||0, oldPay=Number(d.pay)||0;
+      d.type=(d.name==='Nelo'||d.name==='Revolut')?'revolving':'fixed';
+      d.balance=d.type==='revolving' ? oldTotal : Math.max(0,oldTotal-oldPaid);
+      d.nextPayment=oldPay;
+      d.nextPaymentDate=d.date;
+      d.paymentPaid=Math.min(oldPaid,oldPay);
+      d.paymentHistory=[];
+      if(oldPaid>0)d.paymentHistory.push({date:iso(today),amount:oldPaid,legacy:true});
+    });
+    data.schemaVersion=2;
+  }
+  (data.debts||[]).forEach(d=>{
+    if(d.balance===undefined)d.balance=Number(d.total)||0;
+    if(d.nextPayment===undefined)d.nextPayment=Number(d.pay)||0;
+    if(d.nextPaymentDate===undefined)d.nextPaymentDate=d.date;
+    if(d.paymentPaid===undefined)d.paymentPaid=0;
+    if(d.type===undefined)d.type=(d.name==='Nelo'||d.name==='Revolut')?'revolving':'fixed';
+    if(d.paymentHistory===undefined)d.paymentHistory=[];
+  });
+}
+normalizeData();
 
 const SUPABASE_URL='https://fcgqbkabtqhdviffjpwp.supabase.co';
 const SUPABASE_PUBLISHABLE_KEY='sb_publishable_0ly-YmlsNG8UcTzy5J8dVw_4_RNP76X';
@@ -258,7 +285,8 @@ async function loadCloudData(){
     data.recurringMeta=data.recurringMeta||{10:{anchor:'2026-10-14',intervalMonths:3}};
     data.cfe=data.cfe||structuredClone(defaultData.cfe);
     data.cfe.daily=33.31;data.cfe.weekly=233.31;
-    localStorage.setItem(KEY,JSON.stringify(data));
+    normalizeData();
+    await syncToCloud();
   }else{
     await syncToCloud();
   }
@@ -302,16 +330,18 @@ function save(){
   syncToCloud();
 }
 function money(n){return new Intl.NumberFormat('es-MX',{style:'currency',currency:'MXN'}).format(n||0)}
-function remaining(d){return Math.max(0,d.total-d.paid)}
+function remaining(d){return Math.max(0,Number(d.balance)||0)}
 function daysUntil(s){let d=new Date(s+'T23:59:00');return Math.ceil((d-today)/86400000)}
-function status(d){if(remaining(d)<=0)return ['Pagado','b-green'];let x=daysUntil(d.date);if(x<=0)return ['Vencido','b-red'];if(x<=7)return ['Próximo','b-yellow'];return ['Pendiente','b-blue']}
+function paymentRemaining(d){return Math.max(0,(Number(d.nextPayment)||0)-(Number(d.paymentPaid)||0))}
+function status(d){if(remaining(d)<=0)return ['Saldo $0','b-green'];let x=daysUntil(d.nextPaymentDate);if(paymentRemaining(d)<=0)return ['Pago cubierto','b-green'];if(x<=0)return ['Vencido','b-red'];if(x<=7)return ['Próximo','b-yellow'];return ['Pendiente','b-blue']}
+function recordPaymentHistory(d,amount){d.paymentHistory=d.paymentHistory||[];d.paymentHistory.push({date:iso(today),amount:Number(amount)||0});}
 function getCurrentWeekItems(){
  let start=startOfWeek(today), end=new Date(start); end.setDate(end.getDate()+6);
  let items=[];
  data.debts.forEach(d=>{
-   if(remaining(d)<=0 || d.name==='CFE')return;
-   let dt=new Date(d.date+'T12:00');
-   if(dt>=start&&dt<=end)items.push({name:d.name,amount:Math.min(d.pay,remaining(d)),date:dt});
+   if(remaining(d)<=0 || d.name==='CFE' || paymentRemaining(d)<=0)return;
+   let dt=new Date(d.nextPaymentDate+'T12:00');
+   if(dt>=start&&dt<=end)items.push({name:d.name,amount:Math.min(paymentRemaining(d),remaining(d)),date:dt});
  });
  // CFE is reserved daily at $33.31 / $233.31 weekly.
  let cfe=data.debts.find(d=>d.name==='CFE'), cfeEnd=new Date(data.cfe.limit+'T23:59:00');
@@ -356,8 +386,8 @@ function renderWeeklyNeeds(){
      if(remaining(d)<=0)return;
      // CFE se aparta diariamente: $33.31/día = $233.31/semana.
      if(d.name==='CFE')return;
-     let dt=new Date(d.date+'T12:00');
-     if(dt>=start&&dt<=end)items.push({name:d.name,amount:Math.min(d.pay,remaining(d)),date:dt});
+     let dt=new Date(d.nextPaymentDate+'T12:00');
+     if(dt>=start&&dt<=end && paymentRemaining(d)>0)items.push({name:d.name,amount:Math.min(paymentRemaining(d),remaining(d)),date:dt});
    });
    // CFE: se incluye como apartado semanal mientras siga abierto el periodo.
    let cfeEnd=new Date(data.cfe.limit+'T23:59:00');
@@ -392,13 +422,13 @@ function renderWeeklyNeeds(){
  }).join(''):'<div class="empty">No hay pagos pendientes en las próximas 6 semanas 🎉</div>';
 }
 function renderUpcoming(){
- let arr=data.debts.filter(d=>remaining(d)>0).sort((a,b)=>a.date.localeCompare(b.date)).slice(0,7);
- document.getElementById('upcoming').innerHTML=arr.length?arr.map(d=>{let s=status(d),x=daysUntil(d.date);return `<div class="deadline"><div><div class="date">${d.name}</div><div class="mini">${new Date(d.date+'T12:00').toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'})} · ${x<0?'venció hace '+Math.abs(x)+' días':x===0?'vence hoy':x+' días'}</div></div><div style="text-align:right"><div class="amount">${money(d.pay)}</div><span class="badge ${s[1]}">${s[0]}</span></div></div>`}).join(''):'<div class="empty">No tienes pagos pendientes 🎉</div>';
+ let arr=data.debts.filter(d=>remaining(d)>0&&paymentRemaining(d)>0).sort((a,b)=>a.nextPaymentDate.localeCompare(b.nextPaymentDate)).slice(0,7);
+ document.getElementById('upcoming').innerHTML=arr.length?arr.map(d=>{let s=status(d),x=daysUntil(d.nextPaymentDate);return `<div class="deadline"><div><div class="date">${d.name}</div><div class="mini">${new Date(d.nextPaymentDate+'T12:00').toLocaleDateString('es-MX',{day:'2-digit',month:'short',year:'numeric'})} · ${x<0?'venció hace '+Math.abs(x)+' días':x===0?'vence hoy':x+' días'}</div></div><div style="text-align:right"><div class="amount">${money(paymentRemaining(d))}</div><span class="badge ${s[1]}">${s[0]}</span></div></div>`}).join(''):'<div class="empty">No tienes pagos pendientes 🎉</div>';
 }
 function renderDebts(){
  let q=(document.getElementById('search')?.value||'').toLowerCase(),f=document.getElementById('filter')?.value||'all';
- let arr=data.debts.filter(d=>d.name.toLowerCase().includes(q)).filter(d=>f==='all'||(f==='paid'&&remaining(d)<=0)||(f==='open'&&remaining(d)>0)||(f==='urgent'&&remaining(d)>0&&daysUntil(d.date)<=7));
- document.getElementById('debtTable').innerHTML=arr.map(d=>{let s=status(d);return `<tr><td><b>${d.name}</b><div class="mini">${d.note||''}</div></td><td>${money(d.total)}</td><td class="amount">${money(d.pay)}</td><td class="amount">${money(remaining(d))}</td><td>${new Date(d.date+'T12:00').toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'2-digit'})}</td><td><span class="badge ${s[1]}">${s[0]}</span></td><td><button class="smallbtn" onclick="registerPayment(${d.id})">Abonar</button></td></tr>`}).join('')||'<tr><td colspan="7" class="empty">No hay compromisos que coincidan.</td></tr>';
+ let arr=data.debts.filter(d=>d.name.toLowerCase().includes(q)).filter(d=>f==='all'||(f==='paid'&&paymentRemaining(d)<=0)||(f==='open'&&remaining(d)>0)||(f==='urgent'&&remaining(d)>0&&paymentRemaining(d)>0&&daysUntil(d.nextPaymentDate)<=7));
+ document.getElementById('debtTable').innerHTML=arr.map(d=>{let s=status(d),type=d.type==='revolving'?'Revolvente':'Fija';return `<tr><td><b>${d.name}</b><div class="mini">${type} · ${d.note||''}</div></td><td class="amount">${money(d.balance)}</td><td class="amount">${money(d.nextPayment)}${d.paymentPaid>0?`<div class="mini">Pagado: ${money(d.paymentPaid)}</div>`:''}</td><td>${new Date(d.nextPaymentDate+'T12:00').toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'2-digit'})}</td><td><span class="badge ${s[1]}">${s[0]}</span></td><td><button class="smallbtn" onclick="registerPayment(${d.id})">Abonar</button> <button class="smallbtn" onclick="editDebt(${d.id})">Actualizar</button></td></tr>`}).join('')||'<tr><td colspan="6" class="empty">No hay compromisos que coincidan.</td></tr>';
 }
 function recurringKey(i,dueDate=null){
  let date=dueDate;
@@ -438,8 +468,9 @@ function payRecurring(i){
  save();render();
 }
 function renderPayments(){
- let pays=data.debts.filter(d=>d.paid>0);
- document.getElementById('payHistory').innerHTML=pays.length?pays.map(d=>`<div class="deadline"><div><b>${d.name}</b><div class="mini">Abonos acumulados</div></div><div class="amount">${money(d.paid)}</div></div>`).join(''):'<div class="empty">Aún no has registrado pagos.</div>';
+ let pays=[];data.debts.forEach(d=>(d.paymentHistory||[]).forEach(p=>pays.push({name:d.name,date:p.date,amount:p.amount})));
+ pays.sort((a,b)=>String(b.date).localeCompare(String(a.date)));
+ document.getElementById('payHistory').innerHTML=pays.length?pays.map(p=>`<div class="deadline"><div><b>${p.name}</b><div class="mini">${fmt(p.date)}</div></div><div class="amount">${money(p.amount)}</div></div>`).join(''):'<div class="empty">Aún no has registrado pagos.</div>';
 }
 function renderCFE(){let c=data.cfe;let pct=Math.min(100,(c.month-(c.month-(c.month?0:0))));document.getElementById('cfeBox').innerHTML=`<div class="kpi"><div><div class="mini">Apartado objetivo</div><div class="big">${money(c.month)}</div></div><div style="font-size:30px">⚡</div></div><div class="note" style="margin-top:12px">Periodo: ${fmt(c.start)} → ${fmt(c.limit)}<br>Hoy: ${fmt(c.current)}<br><b>Apartado diario: ${money(c.daily)}</b><br><b>Apartado semanal: ${money(c.weekly)}</b></div>`}
 function renderQuick(){let open=data.debts.filter(d=>remaining(d)>0).length, paid=data.debts.filter(d=>remaining(d)<=0).length;document.getElementById('quick').innerHTML=`<div class="deadline"><span>Pendientes</span><b>${open}</b></div><div class="deadline"><span>Liquidados</span><b class="ok">${paid}</b></div><div class="deadline"><span>Suscripciones/servicios</span><b>${data.recurring.length}</b></div>`}
@@ -452,10 +483,24 @@ function calcNeeded(){
  if(document.getElementById('need40')) document.getElementById('need40').value=money(reserve);
 }
 function showView(id,btn){document.querySelectorAll('main section').forEach(x=>x.classList.add('hidden'));document.getElementById(id).classList.remove('hidden');document.querySelectorAll('.nav button').forEach(x=>x.classList.remove('active'));btn.classList.add('active');let titles={dashboard:['Resumen','Tu dinero organizado por fechas y prioridades.'],debts:['Compromisos','Deudas, pagos mínimos y fechas límite.'],recurring:['Recurrentes','Servicios y suscripciones que se repiten.'],payments:['Pagos','Lo que ya has abonado.']};document.getElementById('pageTitle').textContent=titles[id][0];document.getElementById('pageSub').textContent=titles[id][1]}
-function openModal(){document.getElementById('modal').classList.remove('hidden');document.getElementById('fDate').value='2026-09-15';document.getElementById('fName').focus()}
+function openModal(){document.getElementById('modal').classList.remove('hidden');document.getElementById('modalTitle').textContent='Nuevo compromiso';document.getElementById('fName').value='';document.getElementById('fType').value='fixed';document.getElementById('fBalance').value='';document.getElementById('fPay').value='';document.getElementById('fDate').value=iso(today);document.getElementById('fNote').value='';document.getElementById('modal').dataset.editId='';document.getElementById('fName').focus()}
 function closeModal(){document.getElementById('modal').classList.add('hidden')}
-function saveDebt(){let name=document.getElementById('fName').value.trim(),total=+document.getElementById('fTotal').value,pay=+document.getElementById('fPay').value,date=document.getElementById('fDate').value,note=document.getElementById('fNote').value.trim();if(!name||!total||!date){alert('Agrega nombre, monto total y fecha límite.');return}data.debts.push({id:Date.now(),name,total,pay:pay||total,paid:0,date,note});save();closeModal();render()}
-function registerPayment(id){let d=data.debts.find(x=>x.id===id);let n=prompt(`¿Cuánto abonaste a ${d.name}?`,d.pay);if(n===null)return;n=+n;if(!n||n<0)return;d.paid=Math.min(d.total,d.paid+n);save();render()}
+function saveDebt(){
+ let name=document.getElementById('fName').value.trim(),type=document.getElementById('fType').value,balance=+document.getElementById('fBalance').value,pay=+document.getElementById('fPay').value,date=document.getElementById('fDate').value,note=document.getElementById('fNote').value.trim(),editId=+(document.getElementById('modal').dataset.editId||0);
+ if(!name||balance<0||!date){alert('Agrega nombre, saldo actual y fecha del próximo pago.');return}
+ if(editId){let d=data.debts.find(x=>x.id===editId);if(!d)return;let statementChanged=d.nextPayment!== (pay||0) || d.nextPaymentDate!==date;d.name=name;d.type=type;d.balance=balance;d.nextPayment=pay||0;d.nextPaymentDate=date;d.note=note;if(statementChanged)d.paymentPaid=0;}
+ else data.debts.push({id:Date.now(),name,type,balance,nextPayment:pay||0,nextPaymentDate:date,paymentPaid:0,note,paymentHistory:[]});
+ save();closeModal();render()
+}
+function editDebt(id){let d=data.debts.find(x=>x.id===id);if(!d)return;document.getElementById('modal').classList.remove('hidden');document.getElementById('modalTitle').textContent='Actualizar compromiso';document.getElementById('fName').value=d.name;document.getElementById('fType').value=d.type||'fixed';document.getElementById('fBalance').value=d.balance;document.getElementById('fPay').value=d.nextPayment;document.getElementById('fDate').value=d.nextPaymentDate;document.getElementById('fNote').value=d.note||'';document.getElementById('modal').dataset.editId=id}
+function registerPayment(id){
+ let d=data.debts.find(x=>x.id===id);if(!d)return;
+ let due=paymentRemaining(d);let n=prompt(`¿Cuánto pagaste de ${d.name}?`,due||d.nextPayment);if(n===null)return;n=+n;if(!n||n<0)return;n=Math.min(n,due||n);
+ d.paymentPaid=(Number(d.paymentPaid)||0)+n;recordPaymentHistory(d,n);
+ if(d.type==='fixed') d.balance=Math.max(0,(Number(d.balance)||0)-n);
+ save();render();
+ if(d.type==='revolving'&&d.paymentPaid>=d.nextPayment) alert('Pago cubierto ✓\nCuando recibas el siguiente estado de cuenta, usa “Actualizar” para poner el nuevo saldo y el nuevo próximo pago.');
+}
 function removeRecurring(i){if(confirm('¿Eliminar este recurrente?')){data.recurring.splice(i,1);save();render()}}
 calcNeeded();
 render();
