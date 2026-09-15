@@ -389,16 +389,10 @@ function renderWeeklyNeeds(){
      let dt=new Date(d.nextPaymentDate+'T12:00');
      if(dt>=start&&dt<=end && paymentRemaining(d)>0)items.push({name:d.name,amount:Math.min(paymentRemaining(d),remaining(d)),date:dt});
    });
-   // CFE: se incluye como apartado semanal mientras siga abierto el periodo.
-   let cfeEnd=new Date(data.cfe.limit+'T23:59:00');
-   if(end>=new Date(data.cfe.start+'T00:00:00') && start<=cfeEnd){
-     let weekStart=start<new Date(data.cfe.start+'T00:00:00')?new Date(data.cfe.start+'T00:00:00'):start;
-     let weekEnd=end>cfeEnd?cfeEnd:end;
-     let days=Math.floor((weekEnd-weekStart)/86400000)+1;
-     let cfeRemaining=remaining(data.debts.find(d=>d.name==='CFE')||{total:data.cfe.month,paid:0});
-     let cfeAmount=Math.min(data.cfe.weekly, cfeRemaining);
-     if(days<7)cfeAmount=Math.min(data.cfe.daily*days,cfeRemaining);
-     if(cfeAmount>0)items.push({name:'CFE (apartado diario)',amount:cfeAmount,date:weekEnd});
+   // CFE: reserva semanal fija de $233.31 en TODAS las semanas futuras.
+   // El apartado semanal es una previsión recurrente; no se limita al vencimiento del bimestre.
+   if(Number(data.cfe.weekly)>0){
+     items.push({name:'CFE (apartado semanal)',amount:Number(data.cfe.weekly),date:end});
    }
    data.recurring.forEach((r,i)=>{
      let due=recurringDate(r), dt=due?new Date(due+'T12:00'):null;
