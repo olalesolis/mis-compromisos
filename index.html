@@ -84,6 +84,42 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px 8px;border-bottom:1
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
+
+<style>
+/* Recurrentes: mobile layout optimized for iPhone */
+@media (max-width:700px){
+  .main{padding:14px 12px 90px!important;max-width:100vw!important;overflow-x:hidden!important}
+  .top{display:block!important;margin-bottom:14px!important}
+  .title{margin-bottom:10px!important}
+  .title h1{font-size:24px!important}
+  .title p{font-size:14px!important;max-width:260px!important}
+  .user-tools{width:100%!important;display:grid!important;grid-template-columns:auto 1fr auto!important;gap:6px!important;align-items:center!important}
+  .user-tools .primary{grid-column:1/-1!important;width:100%!important}
+  .section{padding:14px 10px!important;overflow:hidden!important}
+  #recurring .section>p{font-size:13px!important;line-height:1.35!important}
+  #recurring table{display:block!important;width:100%!important;font-size:12px!important}
+  #recurring thead{display:none!important}
+  #recurring tbody{display:block!important;width:100%!important}
+  #recurring tr{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;grid-template-areas:"concept amount" "type pay" "actions actions";gap:5px 8px!important;padding:12px 2px!important;border-bottom:1px solid var(--line)!important}
+  #recurring tr:last-child{border-bottom:0!important}
+  #recurring td{display:block!important;border:0!important;padding:0!important;min-width:0!important;text-align:left!important}
+  #recurring td:nth-child(1){grid-area:concept!important;font-size:14px!important;line-height:1.15!important;overflow-wrap:anywhere!important}
+  #recurring td:nth-child(2){grid-area:amount!important;justify-self:end!important;font-size:14px!important}
+  #recurring td:nth-child(3){display:none!important}
+  #recurring td:nth-child(4){grid-area:type!important;align-self:center!important}
+  #recurring td:nth-child(5){grid-area:pay!important;justify-self:end!important}
+  #recurring td:nth-child(6){grid-area:actions!important;display:flex!important;justify-content:flex-end!important;gap:6px!important;flex-wrap:wrap!important}
+  #recurring .smallbtn{padding:7px 10px!important;font-size:11px!important;white-space:nowrap!important}
+  #recurring .badge{font-size:10px!important}
+  #recurring .mini{font-size:10px!important;margin-top:2px!important}
+  #recModal .modalbox{max-height:90vh!important;overflow:auto!important}
+}
+</style>
+
+<style>
+.mobile-due{display:none}
+@media(max-width:700px){.mobile-due{display:block;font-size:10px;color:var(--muted);font-weight:600;margin-top:3px}}
+</style>
 </head>
 <body>
 
@@ -186,6 +222,22 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px 8px;border-bottom:1
     <label class="full">Nota<input id="fNote" placeholder="Ej. pago mínimo, escuela, mensualidad…"></label>
   </div>
   <div class="actions"><button class="secondary" onclick="closeModal()">Cancelar</button><button class="primary" onclick="saveDebt()">Guardar</button></div>
+</div></div>
+
+<div id="recModal" class="modal hidden" onclick="if(event.target===this)closeRecurringModal()">
+<div class="modalbox">
+  <div class="modalhead"><h2>Editar recurrente</h2><button class="x" onclick="closeRecurringModal()">×</button></div>
+  <input type="hidden" id="recEditIndex">
+  <div class="form">
+    <label>Nombre<input id="rfName" placeholder="Ej. Movistar"></label>
+    <label>Monto<input id="rfAmount" type="number" step="0.01" min="0"></label>
+    <label>Día de pago<input id="rfDay" type="number" min="1" max="31"></label>
+    <label>Tipo<select id="rfType"><option>Suscripción</option><option>Servicio</option><option>Personal</option><option>Otro</option></select></label>
+    <label>Frecuencia<select id="rfFrequency"><option value="1">Mensual</option><option value="3">Cada 3 meses</option></select></label>
+    <label>Aplicar cambios desde<input id="rfFrom" type="month"></label>
+  </div>
+  <div class="note" style="margin-top:14px">Los meses anteriores conservan el monto y los datos históricos. El cambio se aplicará desde el mes que elijas.</div>
+  <div class="actions"><button class="secondary" onclick="closeRecurringModal()">Cancelar</button><button class="primary" onclick="saveRecurringEdit()">Guardar cambios</button></div>
 </div></div>
 
 <script>
@@ -443,6 +495,18 @@ function renderDebts(){
  let arr=data.debts.filter(d=>d.name.toLowerCase().includes(q)).filter(d=>f==='all'||(f==='paid'&&paymentRemaining(d)<=0)||(f==='open'&&remaining(d)>0)||(f==='urgent'&&remaining(d)>0&&paymentRemaining(d)>0&&daysUntil(d.nextPaymentDate)<=7));
  document.getElementById('debtTable').innerHTML=arr.map(d=>{let s=status(d),type=d.type==='revolving'?'Revolvente':'Fija';return `<tr><td><b>${d.name}</b><div class="mini">${type} · ${d.note||''}</div></td><td class="amount">${money(d.balance)}</td><td class="amount">${money(d.nextPayment)}${d.paymentPaid>0?`<div class="mini">Pagado: ${money(d.paymentPaid)}</div>`:''}</td><td>${new Date(d.nextPaymentDate+'T12:00').toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit',year:'2-digit'})}</td><td><span class="badge ${s[1]}">${s[0]}</span></td><td><button class="smallbtn" onclick="registerPayment(${d.id})">Abonar</button> <button class="smallbtn" onclick="editDebt(${d.id})">Actualizar</button></td></tr>`}).join('')||'<tr><td colspan="6" class="empty">No hay compromisos que coincidan.</td></tr>';
 }
+function nextRecurringDate(r){
+ let i=data.recurring.indexOf(r); if(i<0)return null;
+ let start=new Date(today.getFullYear(),today.getMonth(),1,12);
+ for(let n=0;n<24;n++){
+   let y=start.getFullYear(), m=start.getMonth();
+   let due=recurringDateByIndex(i,y,m);
+   if(due){let dt=new Date(due+'T12:00'); if(dt>=today)return due;}
+   start.setMonth(start.getMonth()+1);
+ }
+ return null;
+}
+
 function recurringKey(i,dueDate=null){
  let date=dueDate;
  if(!date){
@@ -488,10 +552,16 @@ function recurringAmount(i,dueDate){
 function isRecurringPaid(i,dueDate=null){return !!data.recurringPaid[recurringKey(i,dueDate)]}
 
 function renderRecurring(){
- document.getElementById('recTable').innerHTML=data.recurring.map((r,i)=>{
-   let due=nextRecurringDate(r), paid=isRecurringPaid(i,due), cfg=due?(()=>{let d=new Date(due+'T12:00');return recurringConfig(i,d.getFullYear(),d.getMonth())})():recurringConfig(i,today.getFullYear(),today.getMonth());
+ const rows=data.recurring.map((r,i)=>({r,i,due:nextRecurringDate(r)})).sort((a,b)=>{
+   if(!a.due&&!b.due)return 0;
+   if(!a.due)return 1;
+   if(!b.due)return -1;
+   return a.due.localeCompare(b.due);
+ });
+ document.getElementById('recTable').innerHTML=rows.map(({r,i,due})=>{
+   let paid=isRecurringPaid(i,due), cfg=due?(()=>{let d=new Date(due+'T12:00');return recurringConfig(i,d.getFullYear(),d.getMonth())})():recurringConfig(i,today.getFullYear(),today.getMonth());
    let frequency=(Number(cfg?.intervalMonths)||1)===3?'Cada 3 meses':'Mensual';
-   return `<tr><td><b>${cfg?.name||r[0]}</b></td><td class="amount">${money(cfg?.amount||r[1])}</td><td>${due?fmt(due):'Sin fecha'}</td><td><span class="badge b-blue">${cfg?.type||r[3]}</span><div class="mini">${frequency}</div></td>
+   return `<tr><td><b>${cfg?.name||r[0]}</b><div class="mobile-due">${due?fmt(due):'Sin fecha'}</div></td><td class="amount">${money(cfg?.amount||r[1])}</td><td>${due?fmt(due):'Sin fecha'}</td><td><span class="badge b-blue">${cfg?.type||r[3]}</span><div class="mini">${frequency}</div></td>
    <td>${paid?'<span class="badge b-green">Pagado ✓</span>':'<button class="smallbtn" onclick="payRecurring('+i+')">Pagar</button>'}</td>
    <td><button class="smallbtn" onclick="editRecurring(${i})">Editar</button> <button class="smallbtn" onclick="removeRecurring(${i})">Eliminar</button></td></tr>`
  }).join('')}
