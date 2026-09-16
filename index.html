@@ -443,7 +443,7 @@ function weekLabel(start){
 }
 function renderWeeklyNeeds(){
  let base=startOfWeek(today), weeks=[];
- for(let w=0;w<6;w++){
+ for(let w=0;w<52;w++){
    let start=new Date(base);start.setDate(base.getDate()+w*7);
    let end=new Date(start);end.setDate(start.getDate()+6);
    let items=[];
@@ -454,17 +454,10 @@ function renderWeeklyNeeds(){
      let dt=new Date(d.nextPaymentDate+'T12:00');
      if(dt>=start&&dt<=end && paymentRemaining(d)>0)items.push({name:d.name,amount:Math.min(paymentRemaining(d),remaining(d)),date:dt});
    });
-   // CFE: se incluye como apartado semanal mientras siga abierto el periodo.
-   let cfeEnd=new Date(data.cfe.limit+'T23:59:00');
-   if(end>=new Date(data.cfe.start+'T00:00:00') && start<=cfeEnd){
-     let weekStart=start<new Date(data.cfe.start+'T00:00:00')?new Date(data.cfe.start+'T00:00:00'):start;
-     let weekEnd=end>cfeEnd?cfeEnd:end;
-     let days=Math.floor((weekEnd-weekStart)/86400000)+1;
-     let cfeRemaining=remaining(data.debts.find(d=>d.name==='CFE')||{total:data.cfe.month,paid:0});
-     let cfeAmount=Math.min(data.cfe.weekly, cfeRemaining);
-     if(days<7)cfeAmount=Math.min(data.cfe.daily*days,cfeRemaining);
-     if(cfeAmount>0)items.push({name:'CFE (apartado diario)',amount:cfeAmount,date:weekEnd});
-   }
+   // CFE: se aparta $233.31 cada semana en toda la proyección.
+   // Esto permite ver desde ahora cuánto corresponde separar en cada semana y mes futuro.
+   let cfeAmount=Number(data.cfe.weekly)||233.31;
+   if(cfeAmount>0)items.push({name:'CFE (apartado semanal)',amount:cfeAmount,date:weekEnd});
    data.recurring.forEach((r,i)=>{
      let due=recurringDate(r), dt=due?new Date(due+'T12:00'):null;
      if(!dt)return;
