@@ -212,12 +212,22 @@ const defaultData={
 let data=JSON.parse(localStorage.getItem(KEY)||'null')||structuredClone(defaultData);
 data.recurringPaid=data.recurringPaid||{};
 data.recurringMeta=data.recurringMeta||{10:{anchor:'2026-10-14',intervalMonths:3}};
+data.recurringVersions=data.recurringVersions||{};
 data.cfe=data.cfe||structuredClone(defaultData.cfe);
 data.cfe.daily=33.31;
 data.cfe.weekly=233.31;
 // Version 2: separate current balance, next payment and payment status.
 // The migration runs once. Existing cumulative payments are converted into the
 // current balance and the current payment status without guessing future statements.
+function normalizeRecurringData(){
+  data.recurringVersions=data.recurringVersions||{};
+  // Google was moved from the 3rd to the 16th of each month.
+  const googleIndex=(data.recurring||[]).findIndex(r=>r[0]==='Google');
+  if(googleIndex>=0 && Number(data.recurring[googleIndex][2])===3){
+    data.recurring[googleIndex][2]=16;
+  }
+}
+normalizeRecurringData();
 function normalizeData(){
   // Google cambió su día de cobro: ahora es el 16 de cada mes.
   const google=data.recurring?.find(r=>r[0]==='Google');
@@ -408,7 +418,7 @@ function renderWeeklyNeeds(){
      if(!dt)return;
      let key=recurringKey(i,due);
      if(data.recurringPaid[key])return;
-     if(dt>=start&&dt<=end)items.push({name:r[0],amount:r[1],date:dt,rec:true,index:i});
+     if(dt>=start&&dt<=end)items.push({name:recurringConfig(i,dt.getFullYear(),dt.getMonth()).name,amount:recurringAmount(i,due),date:dt,rec:true,index:i});
    });
    let required=items.reduce((a,x)=>a+x.amount,0);
    if(items.length)weeks.push({start,items,required});
@@ -441,34 +451,81 @@ function recurringKey(i,dueDate=null){
  }
  return `${date||'unknown'}-${i}`;
 }
-function recurringDate(r, year=today.getFullYear(), month=today.getMonth()){
- let idx=data.recurring.indexOf(r), meta=data.recurringMeta?.[idx];
- if(meta?.anchor){
-   let anchor=new Date(meta.anchor+'T12:00'), target=new Date(year,month,14,12);
-   let diff=(target.getFullYear()-anchor.getFullYear())*12+(target.getMonth()-anchor.getMonth());
-   if(diff%meta.intervalMonths!==0) return null;
-   return meta.anchor;
+function recurringConfig(i, year, month){
+ let r=data.recurring[i];
+ if(!r)return null;
+ let cfg={name:r[0],amount:Number(r[1])||0,day:Number(r[2])||1,type:r[3]||'Suscripción',intervalMonths:Number(data.recurringMeta?.[i]?.intervalMonths)||1};
+ let versions=(data.recurringVersions?.[i]||[]).slice().sort((a,b)=>String(a.from).localeCompare(String(b.from)));
+ let target=`${year}-${String(month+1).padStart(2,'0')}`;
+ for(const v of versions){if(String(v.from)<=target){cfg={...cfg,...v};}else break;}
+ return cfg;
+}
+function recurringDateByIndex(i, year=today.getFullYear(), month=today.getMonth()){
+ let cfg=recurringConfig(i,year,month); if(!cfg)return null;
+ let meta=data.recurringMeta?.[i];
+ let interval=Number(cfg.intervalMonths)||1;
+ if(interval>1){
+   let anchorMonth=(meta?.anchor||`${year}-${String(month+1).padStart(2,'0')}-${String(cfg.day).padStart(2,'0')}`).slice(0,7);
+   let [ay,am]=anchorMonth.split('-').map(Number);
+   let diff=(year-ay)*12+(month+1-am);
+   if(diff<0 || diff%interval!==0)return null;
  }
- let day=Math.min(+r[2],new Date(year,month+1,0).getDate());
- return `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`
+ let day=Math.min(Number(cfg.day)||1,new Date(year,month+1,0).getDate());
+ return `${year}-${String(month+1).padStart(2,'0')}-${String(day).padStart(2,'0')}`;
+}
+function recurringDate(r, year=today.getFullYear(), month=today.getMonth()){
+ let i=data.recurring.indexOf(r);
+ return recurringDateByIndex(i,year,month);
+}
+function recurringOccurrencesInRange(r,start,end){
+ let i=data.recurring.indexOf(r), out=[], cur=new Date(start.getFullYear(),start.getMonth(),1,12), last=new Date(end.getFullYear(),end.getMonth(),1,12);
+ while(cur<=last){let due=recurringDateByIndex(i,cur.getFullYear(),cur.getMonth()); if(due){let dt=new Date(due+'T12:00');if(dt>=start&&dt<=end)out.push(due);}cur.setMonth(cur.getMonth()+1)}
+ return out;
+}
+function recurringAmount(i,dueDate){
+ let d=new Date(dueDate+'T12:00'); return recurringConfig(i,d.getFullYear(),d.getMonth())?.amount||0;
 }
 function isRecurringPaid(i,dueDate=null){return !!data.recurringPaid[recurringKey(i,dueDate)]}
 
 function renderRecurring(){
  document.getElementById('recTable').innerHTML=data.recurring.map((r,i)=>{
-   let due=recurringDate(r), paid=isRecurringPaid(i,due);
-   let frequency=(data.recurringMeta?.[i]?.intervalMonths===3)?'Cada 3 meses':'Mensual';
-   return `<tr><td><b>${r[0]}</b></td><td class="amount">${money(r[1])}</td><td>${due?fmt(due):'14 de oct.'}</td><td><span class="badge b-blue">${r[3]}</span><div class="mini">${frequency}</div></td>
+   let due=nextRecurringDate(r), paid=isRecurringPaid(i,due), cfg=due?(()=>{let d=new Date(due+'T12:00');return recurringConfig(i,d.getFullYear(),d.getMonth())})():recurringConfig(i,today.getFullYear(),today.getMonth());
+   let frequency=(Number(cfg?.intervalMonths)||1)===3?'Cada 3 meses':'Mensual';
+   return `<tr><td><b>${cfg?.name||r[0]}</b></td><td class="amount">${money(cfg?.amount||r[1])}</td><td>${due?fmt(due):'Sin fecha'}</td><td><span class="badge b-blue">${cfg?.type||r[3]}</span><div class="mini">${frequency}</div></td>
    <td>${paid?'<span class="badge b-green">Pagado ✓</span>':'<button class="smallbtn" onclick="payRecurring('+i+')">Pagar</button>'}</td>
-   <td><button class="smallbtn" onclick="removeRecurring(${i})">Eliminar</button></td></tr>`
+   <td><button class="smallbtn" onclick="editRecurring(${i})">Editar</button> <button class="smallbtn" onclick="removeRecurring(${i})">Eliminar</button></td></tr>`
  }).join('')}
 function payRecurring(i){
- let r=data.recurring[i], due=recurringDate(r), key=recurringKey(i,due), n=prompt(`¿Cuánto pagaste de ${r[0]}?`,r[1]);
- if(n===null)return; n=+n;
- if(!n||n<0)return;
- if(n>=r[1]) data.recurringPaid[key]=true;
- else alert(`Para que el cálculo semanal sea preciso, registra el pago completo de ${money(r[1])}. Si necesitas manejar abonos parciales, conviene registrarlo como compromiso.`);
+ let r=data.recurring[i], due=nextRecurringDate(r); if(!due){alert('No hay un próximo vencimiento programado.');return}
+ let amount=recurringAmount(i,due), key=recurringKey(i,due), n=prompt(`¿Cuánto pagaste de ${r[0]}?`,amount);
+ if(n===null)return; n=+n; if(!n||n<0)return;
+ if(n>=amount) data.recurringPaid[key]=true; else alert(`Para que el cálculo semanal sea preciso, registra el pago completo de ${money(amount)}. Si necesitas manejar abonos parciales, conviene registrarlo como compromiso.`);
  save();render();
+}
+function editRecurring(i){
+ let r=data.recurring[i]; if(!r)return;
+ let cfg=recurringConfig(i,today.getFullYear(),today.getMonth());
+ document.getElementById('recModal').classList.remove('hidden');
+ document.getElementById('recEditIndex').value=i;
+ document.getElementById('rfName').value=cfg.name||r[0];
+ document.getElementById('rfAmount').value=cfg.amount||r[1];
+ document.getElementById('rfDay').value=cfg.day||r[2];
+ document.getElementById('rfType').value=cfg.type||r[3];
+ document.getElementById('rfFrequency').value=(Number(cfg.intervalMonths)||1)===3?'3':'1';
+ document.getElementById('rfFrom').value=`${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}`;
+}
+function closeRecurringModal(){document.getElementById('recModal').classList.add('hidden')}
+function saveRecurringEdit(){
+ let i=Number(document.getElementById('recEditIndex').value), r=data.recurring[i]; if(!r)return;
+ let name=document.getElementById('rfName').value.trim(), amount=Number(document.getElementById('rfAmount').value), day=Number(document.getElementById('rfDay').value), type=document.getElementById('rfType').value, intervalMonths=Number(document.getElementById('rfFrequency').value)||1, from=document.getElementById('rfFrom').value;
+ if(!name||amount<0||!day||day<1||day>31||!from){alert('Completa nombre, monto, día y mes desde el que aplica.');return}
+ data.recurringVersions=data.recurringVersions||{}; data.recurringVersions[i]=data.recurringVersions[i]||[];
+ data.recurringVersions[i]=data.recurringVersions[i].filter(v=>v.from!==from);
+ data.recurringVersions[i].push({from,name,amount,day,type,intervalMonths});
+ data.recurringVersions[i].sort((a,b)=>String(a.from).localeCompare(String(b.from)));
+ if(intervalMonths===3){data.recurringMeta=data.recurringMeta||{};let [y,m]=from.split('-').map(Number);data.recurringMeta[i]={anchor:`${y}-${String(m).padStart(2,'0')}-${String(day).padStart(2,'0')}`,intervalMonths:3};}
+ else if(data.recurringMeta?.[i]) delete data.recurringMeta[i];
+ save();closeRecurringModal();render();
 }
 function renderPayments(){
  let pays=[];data.debts.forEach(d=>(d.paymentHistory||[]).forEach(p=>pays.push({name:d.name,date:p.date,amount:p.amount})));
