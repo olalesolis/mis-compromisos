@@ -109,7 +109,9 @@ table{width:100%;border-collapse:collapse}th,td{padding:11px 8px;border-bottom:1
   #recurring td:nth-child(4){grid-area:type!important;align-self:center!important}
   #recurring td:nth-child(5){grid-area:pay!important;justify-self:end!important}
   #recurring td:nth-child(6){grid-area:actions!important;display:flex!important;justify-content:flex-end!important;gap:6px!important;flex-wrap:wrap!important}
-  #recurring .smallbtn{padding:7px 10px!important;font-size:11px!important;white-space:nowrap!important}
+  #recurring .smallbtn{padding:7px 8px!important;font-size:10px!important;white-space:nowrap!important}
+   #recurring td:nth-child(6){min-width:0!important}
+   #recurring td:nth-child(6) .smallbtn{flex:0 0 auto!important}
   #recurring .badge{font-size:10px!important}
   #recurring .mini{font-size:10px!important;margin-top:2px!important}
   #recModal .modalbox{max-height:90vh!important;overflow:auto!important}
@@ -408,22 +410,20 @@ function getCurrentWeekItems(){
    let dt=new Date(d.nextPaymentDate+'T12:00');
    if(dt>=start&&dt<=end)items.push({name:d.name,amount:Math.min(paymentRemaining(d),remaining(d)),date:dt});
  });
- // CFE is reserved daily at $33.31 / $233.31 weekly.
- let cfe=data.debts.find(d=>d.name==='CFE'), cfeEnd=new Date(data.cfe.limit+'T23:59:00');
- if(end>=new Date(data.cfe.start+'T00:00:00') && start<=cfeEnd){
-   let cfeStart=start<new Date(data.cfe.start+'T00:00:00')?new Date(data.cfe.start+'T00:00:00'):start;
-   let cfeWeekEnd=end>cfeEnd?cfeEnd:end;
-   let days=Math.floor((cfeWeekEnd-cfeStart)/86400000)+1;
-   let amount=Math.min(days<7?data.cfe.daily*days:data.cfe.weekly, Math.max(0,remaining(cfe||{total:data.cfe.month,paid:0})));
-   if(amount>0)items.push({name:'CFE (apartado)',amount,date:cfeWeekEnd});
- }
+ // CFE: apartar $233.31 cada semana.
+ let cfeAmount=Number(data.cfe?.weekly)||233.31;
+ if(cfeAmount>0)items.push({name:'CFE (apartado semanal)',amount:cfeAmount,date:end});
+ // Recurrentes: buscar la ocurrencia real dentro de ESTA semana.
  data.recurring.forEach((r,i)=>{
-   let due=recurringDate(r);
-   if(!due)return;
-   let dt=new Date(due+'T12:00'), key=recurringKey(i,due);
-   if(dt>=start&&dt<=end&&!data.recurringPaid[key])items.push({name:r[0],amount:r[1],date:dt});
+   recurringOccurrencesInRange(r,start,end).forEach(due=>{
+     let key=recurringKey(i,due);
+     if(!data.recurringPaid[key]){
+       let dt=new Date(due+'T12:00');
+       items.push({name:recurringConfig(i,dt.getFullYear(),dt.getMonth())?.name||r[0],amount:recurringAmount(i,due),date:dt,rec:true,index:i});
+     }
+   });
  });
- return items;
+ return items.sort((a,b)=>a.date-b.date);
 }
 function currentWeekPaymentTotal(){return getCurrentWeekItems().reduce((a,x)=>a+x.amount,0)}
 function render(){
@@ -448,28 +448,29 @@ function renderWeeklyNeeds(){
    let end=new Date(start);end.setDate(start.getDate()+6);
    let items=[];
    data.debts.forEach(d=>{
-     if(remaining(d)<=0)return;
-     // CFE se aparta diariamente: $33.31/día = $233.31/semana.
-     if(d.name==='CFE')return;
+     if(remaining(d)<=0 || d.name==='CFE' || paymentRemaining(d)<=0)return;
      let dt=new Date(d.nextPaymentDate+'T12:00');
-     if(dt>=start&&dt<=end && paymentRemaining(d)>0)items.push({name:d.name,amount:Math.min(paymentRemaining(d),remaining(d)),date:dt});
+     if(dt>=start&&dt<=end)items.push({name:d.name,amount:Math.min(paymentRemaining(d),remaining(d)),date:dt});
    });
-   // CFE: se aparta $233.31 cada semana en toda la proyección.
-   // Esto permite ver desde ahora cuánto corresponde separar en cada semana y mes futuro.
-   let cfeAmount=Number(data.cfe.weekly)||233.31;
-   if(cfeAmount>0)items.push({name:'CFE (apartado semanal)',amount:cfeAmount,date:weekEnd});
+   // CFE: siempre $233.31 por semana en la proyección.
+   let cfeAmount=Number(data.cfe?.weekly)||233.31;
+   if(cfeAmount>0)items.push({name:'CFE (apartado semanal)',amount:cfeAmount,date:end});
+   // Recurrentes: incluir todas las ocurrencias que caen dentro de esta semana.
    data.recurring.forEach((r,i)=>{
-     let due=recurringDate(r), dt=due?new Date(due+'T12:00'):null;
-     if(!dt)return;
-     let key=recurringKey(i,due);
-     if(data.recurringPaid[key])return;
-     if(dt>=start&&dt<=end)items.push({name:recurringConfig(i,dt.getFullYear(),dt.getMonth()).name,amount:recurringAmount(i,due),date:dt,rec:true,index:i});
+     recurringOccurrencesInRange(r,start,end).forEach(due=>{
+       let key=recurringKey(i,due);
+       if(data.recurringPaid[key])return;
+       let dt=new Date(due+'T12:00');
+       let cfg=recurringConfig(i,dt.getFullYear(),dt.getMonth());
+       items.push({name:cfg?.name||r[0],amount:recurringAmount(i,due),date:dt,rec:true,index:i});
+     });
    });
+   items.sort((a,b)=>a.date-b.date);
    let required=items.reduce((a,x)=>a+x.amount,0);
-   if(items.length)weeks.push({start,items,required});
+   weeks.push({start,items,required});
  }
  let el=document.getElementById('weeklyNeeds');
- el.innerHTML=weeks.length?weeks.map((w,idx)=>{
+ el.innerHTML=weeks.map((w,idx)=>{
    let income=w.required/.60;
    return `<div class="card" style="margin-bottom:10px;padding:14px">
      <div class="kpi"><div><b>Semana ${idx+1}: ${weekLabel(w.start)}</b><div class="mini">${w.items.length} pago(s) programado(s)</div></div>
@@ -477,7 +478,7 @@ function renderWeeklyNeeds(){
      <div style="margin-top:10px">${w.items.map(x=>`<div class="deadline"><span>${x.name}<span class="mini"> · ${x.date.toLocaleDateString('es-MX',{day:'2-digit',month:'2-digit'})}</span></span><span class="amount">${money(x.amount)}</span></div>`).join('')}</div>
      <div class="note" style="margin-top:10px">💳 Pagos: <b>${money(w.required)}</b> · 🟣 Apartados (40%): <b>${money(income*.40)}</b> · 🎯 Ingreso necesario: <b>${money(income)}</b></div>
    </div>`
- }).join(''):'<div class="empty">No hay pagos pendientes en las próximas 6 semanas 🎉</div>';
+ }).join('');
 }
 function renderUpcoming(){
  let arr=data.debts.filter(d=>remaining(d)>0&&paymentRemaining(d)>0).sort((a,b)=>a.nextPaymentDate.localeCompare(b.nextPaymentDate)).slice(0,7);
